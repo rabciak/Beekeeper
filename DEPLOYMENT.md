@@ -93,3 +93,33 @@ Once the containers are running, you can access the application by navigating to
   ```
 
 That's it! Your Beehive Placement Analyzer application is now deployed and accessible.
+
+---
+
+## Local Development
+
+To run the application on your local machine for development, you will also use Docker. The process is very similar to the production deployment.
+
+### Prerequisites
+
+- Docker and Docker Compose installed on your local machine.
+
+### Steps
+
+1.  **Clone the Repository:**
+    If you haven't already, clone the repository to your local machine.
+    ```bash
+    git clone <repository_url>
+    cd <repository_directory>
+    ```
+
+2.  **Build and Run with Docker Compose:**
+    From the root of the project directory, run the following command:
+    ```bash
+    docker-compose up --build
+    ```
+    This will build the Docker images and start the containers. Unlike the production command, we omit the `-d` flag so you can see the logs from both the frontend and backend services directly in your terminal. To stop the services, press `Ctrl+C`.
+
+3.  **Access the Application:**
+    Once the containers are running, you can access the application in your web browser at:
+    [http://localhost](http://localhost)
