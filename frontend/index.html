@@ -79,7 +79,7 @@
     async function selectParcelOnMap(latlng) {
         document.getElementById('loader').style.display = 'inline';
         try {
-            const response = await fetch(`http://localhost:5001/api/parcel_by_coords?lat=${latlng.lat}&lon=${latlng.lng}`);
+            const response = await fetch(`/api/parcel_by_coords?lat=${latlng.lat}&lon=${latlng.lng}`);
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Failed to fetch parcel data.');
@@ -115,7 +115,7 @@
         document.getElementById('loader').style.display = 'inline';
 
         try {
-            const response = await fetch(`http://localhost:5001/api/parcel?id=${parcelId}`);
+            const response = await fetch(`/api/parcel?id=${parcelId}`);
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Failed to fetch parcel data.');
@@ -156,7 +156,7 @@
         resultsDiv.innerHTML = 'Analyzing...';
 
         try {
-            const response = await fetch('http://localhost:5001/api/analyze', {
+            const response = await fetch('/api/analyze', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
