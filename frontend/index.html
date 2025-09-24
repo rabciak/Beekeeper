@@ -4,26 +4,121 @@
     <title>Beehive Placement Analyzer</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"
-          integrity="sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A=="
-          crossorigin=""/>
-    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"
-            integrity="sha512-XQoYMqMTK8LvdxXYG3nZ448hOEQiglfqkJs1NOQV44cWnUrBc8PkAOcXy20w0vlaXaVUearIOBhiXZ5V3ynxwA=="
-            crossorigin=""></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <style>
-        #map { height: 100vh; }
+        body { margin: 0; padding: 0; font-family: sans-serif; }
+        #map { height: 100vh; width: 100%; }
+        #controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        }
+        #controls input {
+            padding: 5px;
+            margin-right: 5px;
+        }
     </style>
 </head>
 <body>
+
+<div id="controls">
+    <input type="text" id="parcelId" placeholder="Enter Parcel ID (e.g., 022602_1.0003.59)">
+    <button onclick="searchParcel()">Search</button>
+    <button id="analyzeBtn" onclick="analyzeParcel()" disabled>Analyze</button>
+    <div id="results"></div>
+</div>
 
 <div id="map"></div>
 
 <script>
     var map = L.map('map').setView([52, 19], 6); // Centered on Poland
+    var parcelLayer = L.geoJSON().addTo(map);
+    var currentParcelData = null;
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
+
+    async function searchParcel() {
+        const parcelId = document.getElementById('parcelId').value;
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const resultsDiv = document.getElementById('results');
+
+        resultsDiv.innerHTML = '';
+        analyzeBtn.disabled = true;
+        currentParcelData = null;
+
+        if (!parcelId) {
+            alert('Please enter a parcel ID.');
+            return;
+        }
+
+        try {
+            const response = await fetch(`http://localhost:5001/api/parcel?id=${parcelId}`);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to fetch parcel data.');
+            }
+
+            const parcelData = await response.json();
+            currentParcelData = parcelData;
+
+            parcelLayer.clearLayers();
+            parcelLayer.addData(parcelData);
+            map.fitBounds(parcelLayer.getBounds());
+
+            analyzeBtn.disabled = false;
+
+        } catch (error) {
+            console.error('Error:', error);
+            alert(`Error: ${error.message}`);
+        }
+    }
+
+    async function analyzeParcel() {
+        if (!currentParcelData) {
+            alert('No parcel selected for analysis.');
+            return;
+        }
+
+        const resultsDiv = document.getElementById('results');
+        resultsDiv.innerHTML = 'Analyzing...';
+
+        try {
+            const response = await fetch('http://localhost:5001/api/analyze', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ geometry: currentParcelData.geometry }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to analyze parcel.');
+            }
+
+            const result = await response.json();
+
+            if (result.violations) {
+                resultsDiv.innerHTML = '<strong>Violations:</strong><ul>' +
+                                       result.violations.map(v => `<li>${v}</li>`).join('') +
+                                       '</ul>';
+            } else {
+                resultsDiv.innerHTML = `<strong>${result.message}</strong>`;
+            }
+
+        } catch (error) {
+            console.error('Error:', error);
+            resultsDiv.innerHTML = `<strong style="color: red;">Error: ${error.message}</strong>`;
+        }
+    }
 </script>
 
 </body>
