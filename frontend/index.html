@@ -7,43 +7,97 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <style>
-        body { margin: 0; padding: 0; font-family: sans-serif; }
-        #map { height: 100vh; width: 100%; }
-        #controls {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            z-index: 1000;
-            background: white;
-            padding: 10px;
-            border-radius: 5px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.2);
-        }
-        #controls input {
-            padding: 5px;
-            margin-right: 5px;
-        }
+        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display: flex; flex-direction: column; height: 100vh; }
+        #map { flex-grow: 1; }
+        #menu { background: #fff; padding: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); z-index: 1001; }
+        #controls { display: flex; align-items: center; gap: 10px; }
+        #controls input[type="text"] { padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+        #controls button { padding: 8px 12px; border: none; border-radius: 4px; background-color: #007bff; color: white; cursor: pointer; font-size: 14px; }
+        #controls button:disabled { background-color: #ccc; cursor: not-allowed; }
+        #controls button:hover:not(:disabled) { background-color: #0056b3; }
+        #results { margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px; }
+        #loader { display: none; margin-left: 10px; }
+        footer { padding: 5px; background: #f8f9fa; text-align: center; font-size: 12px; }
+        .modal { display: none; position: fixed; z-index: 1002; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4); }
+        .modal-content { background-color: #fefefe; margin: 15% auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 500px; border-radius: 5px; }
+        .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; }
+        .close:hover, .close:focus { color: black; text-decoration: none; cursor: pointer; }
     </style>
 </head>
 <body>
 
-<div id="controls">
-    <input type="text" id="parcelId" placeholder="Enter Parcel ID (e.g., 022602_1.0003.59)">
-    <button onclick="searchParcel()">Search</button>
-    <button id="analyzeBtn" onclick="analyzeParcel()" disabled>Analyze</button>
+<div id="menu">
+    <div id="controls">
+        <input type="text" id="parcelId" placeholder="Enter Parcel ID">
+        <button onclick="searchParcel()">Search</button>
+        <button id="selectBtn">Select on Map</button>
+        <button id="analyzeBtn" onclick="analyzeParcel()" disabled>Analyze</button>
+        <div id="loader">Loading...</div>
+        <button onclick="showAbout()">About</button>
+    </div>
     <div id="results"></div>
 </div>
 
 <div id="map"></div>
 
+<footer>
+    &copy; 2024 Beehive Placement Analyzer
+</footer>
+
+<div id="aboutModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="hideAbout()">&times;</span>
+        <h2>About Beehive Placement Analyzer</h2>
+        <p>This tool helps to analyze parcels for suitable beehive placement based on Polish regulations.</p>
+    </div>
+</div>
+
 <script>
-    var map = L.map('map').setView([52, 19], 6); // Centered on Poland
+    var map = L.map('map').setView([52, 19], 6);
     var parcelLayer = L.geoJSON().addTo(map);
     var currentParcelData = null;
+    var selectMode = false;
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
+
+    const selectBtn = document.getElementById('selectBtn');
+    selectBtn.addEventListener('click', () => {
+        selectMode = !selectMode;
+        selectBtn.style.backgroundColor = selectMode ? '#28a745' : '#007bff';
+        selectBtn.textContent = selectMode ? 'Cancel Selection' : 'Select on Map';
+        map.getContainer().style.cursor = selectMode ? 'crosshair' : '';
+    });
+
+    map.on('click', function(e) {
+        if (selectMode) {
+            selectParcelOnMap(e.latlng);
+        }
+    });
+
+    async function selectParcelOnMap(latlng) {
+        document.getElementById('loader').style.display = 'inline';
+        try {
+            const response = await fetch(`http://localhost:5001/api/parcel_by_coords?lat=${latlng.lat}&lon=${latlng.lng}`);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to fetch parcel data.');
+            }
+            const parcelData = await response.json();
+            handleParcelData(parcelData);
+            document.getElementById('parcelId').value = parcelData.properties.parcel_id;
+        } catch (error) {
+            console.error('Error:', error);
+            alert(`Error: ${error.message}`);
+        } finally {
+            document.getElementById('loader').style.display = 'none';
+            selectMode = false;
+            selectBtn.style.backgroundColor = '#007bff';
+            selectBtn.textContent = 'Select on Map';
+            map.getContainer().style.cursor = '';
+        }
+    }
 
     async function searchParcel() {
         const parcelId = document.getElementById('parcelId').value;
@@ -58,6 +112,7 @@
             alert('Please enter a parcel ID.');
             return;
         }
+        document.getElementById('loader').style.display = 'inline';
 
         try {
             const response = await fetch(`http://localhost:5001/api/parcel?id=${parcelId}`);
@@ -65,20 +120,30 @@
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Failed to fetch parcel data.');
             }
-
             const parcelData = await response.json();
-            currentParcelData = parcelData;
-
-            parcelLayer.clearLayers();
-            parcelLayer.addData(parcelData);
-            map.fitBounds(parcelLayer.getBounds());
-
-            analyzeBtn.disabled = false;
-
+            handleParcelData(parcelData);
         } catch (error) {
             console.error('Error:', error);
             alert(`Error: ${error.message}`);
+        } finally {
+            document.getElementById('loader').style.display = 'none';
         }
+    }
+
+    function handleParcelData(parcelData) {
+        currentParcelData = parcelData;
+        parcelLayer.clearLayers();
+        parcelLayer.addData(parcelData);
+        map.fitBounds(parcelLayer.getBounds());
+        document.getElementById('analyzeBtn').disabled = false;
+    }
+
+    function showAbout() {
+        document.getElementById('aboutModal').style.display = 'block';
+    }
+
+    function hideAbout() {
+        document.getElementById('aboutModal').style.display = 'none';
     }
 
     async function analyzeParcel() {

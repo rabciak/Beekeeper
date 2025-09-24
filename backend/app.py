@@ -13,7 +13,24 @@ CORS(app)
 # Leaflet uses WGS 84 (EPSG:4326)
 crs_2180 = CRS("EPSG:2180")
 crs_4326 = CRS("EPSG:4326")
-transformer = Transformer.from_crs(crs_2180, crs_4326, always_xy=True)
+transformer_to_wgs84 = Transformer.from_crs(crs_2180, crs_4326, always_xy=True)
+transformer_to_2180 = Transformer.from_crs(crs_4326, crs_2180, always_xy=True)
+
+def get_parcel_id_by_coords(lat, lon):
+    """Fetches parcel ID from the ULDK API using geographic coordinates."""
+    x, y = transformer_to_2180.transform(lon, lat)
+    url = f"https://uldk.gugik.gov.pl/?request=GetParcelByXY&xy={x},{y}&result=id"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        status_code, parcel_id = response.text.strip().split('\n', 1)
+        if status_code != '0' or not parcel_id.strip():
+            return None, "No parcel found at this location."
+        return parcel_id.strip(), None
+    except requests.exceptions.RequestException as e:
+        return None, f"Failed to connect to ULDK API: {e}"
+    except (ValueError, IndexError) as e:
+        return None, f"Failed to parse ULDK API response: {e}"
 
 def get_parcel_geometry(parcel_id):
     """Fetches parcel geometry from the ULDK API and converts it to GeoJSON."""
@@ -36,7 +53,7 @@ def get_parcel_geometry(parcel_id):
         polygon_2180 = loads(wkt_data)
 
         # Transform all points in the polygon to the new coordinate system
-        transformed_coords = [transformer.transform(x, y) for x, y in polygon_2180.exterior.coords]
+        transformed_coords = [transformer_to_wgs84.transform(x, y) for x, y in polygon_2180.exterior.coords]
 
         # Create a new polygon with the transformed coordinates
         from shapely.geometry import Polygon
@@ -58,6 +75,29 @@ def get_parcel():
 
     geometry, error = get_parcel_geometry(parcel_id)
 
+    if error:
+        return jsonify({"error": error}), 500
+
+    return jsonify({
+        "type": "Feature",
+        "geometry": geometry,
+        "properties": {
+            "parcel_id": parcel_id
+        }
+    })
+
+@app.route('/api/parcel_by_coords', methods=['GET'])
+def get_parcel_by_coords():
+    lat = request.args.get('lat')
+    lon = request.args.get('lon')
+    if not lat or not lon:
+        return jsonify({"error": "Latitude and longitude are required"}), 400
+
+    parcel_id, error = get_parcel_id_by_coords(float(lat), float(lon))
+    if error:
+        return jsonify({"error": error}), 500
+
+    geometry, error = get_parcel_geometry(parcel_id)
     if error:
         return jsonify({"error": error}), 500
 
