@@ -46,7 +46,7 @@ Inside the `server { listen 443 ssl; ... }` block, after the existing `location 
 ```nginx
     # Add this new block for the Beekeeper App
     location /beekeeper/ {
-        proxy_pass http://localhost:8080/;
+        proxy_pass http://localhost:8080;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
