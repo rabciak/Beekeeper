@@ -32,41 +32,36 @@ You can now access the application directly by navigating to your server's IP ad
 
 ## Integrating with Your Existing Nginx (for n8n)
 
-You mentioned you are running `n8n` on the same server, which uses a global Nginx server. To make the Beekeeper app accessible on the standard port 80 (e.g., at a path like `http://54.37.17.30/beekeeper`), you can configure your **global Nginx** to act as a reverse proxy.
+You mentioned you are running `n8n` on the same server, which uses a global Nginx server. To make the Beekeeper app accessible on the standard port 80/443 (e.g., at a path like `https://54.37.17.30/beekeeper`), you should modify your **existing global Nginx configuration** to act as a reverse proxy.
 
-**1. Create a new Nginx configuration file:**
+**1. Edit your existing Nginx configuration file:**
+Open the configuration file that handles your `n8n` application. This is likely located at `/etc/nginx/sites-available/n8n`.
 ```bash
-sudo nano /etc/nginx/sites-available/beekeeper
+sudo nano /etc/nginx/sites-available/n8n
 ```
 
-**2. Add the following content to the file:**
-This configuration tells Nginx that any traffic coming to the `/beekeeper/` path should be forwarded to our application running on port `8080`.
+**2. Add a new `location` block for the Beekeeper app:**
+Inside the `server { listen 443 ssl; ... }` block, after the existing `location / { ... }` block for `n8n`, add the following new block.
+
 ```nginx
-location /beekeeper/ {
-    proxy_pass http://localhost:8080/;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
-}
+    # Add this new block for the Beekeeper App
+    location /beekeeper/ {
+        proxy_pass http://localhost:8080/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 ```
 *Save and close the file (`Ctrl+X`, `Y`, `Enter`).*
 
-**3. Enable the new configuration:**
-```bash
-sudo ln -s /etc/nginx/sites-available/beekeeper /etc/nginx/sites-enabled/
-```
-
-**4. Test and restart your global Nginx:**
+**3. Test and restart your global Nginx:**
 ```bash
 sudo nginx -t
 sudo systemctl restart nginx
 ```
 
-After this, you should be able to access the Beekeeper application at **http://54.37.17.30/beekeeper/**.
+After this, you should be able to access the Beekeeper application at **https://54.37.17.30/beekeeper/**.
 
 ---
 
