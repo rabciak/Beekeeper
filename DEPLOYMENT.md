@@ -1,125 +1,105 @@
 # Beehive Placement Analyzer Deployment Guide
 
-This guide provides step-by-step instructions for deploying the Beehive Placement Analyzer application on a VPS using Docker and Docker Compose.
+This guide provides step-by-step instructions for deploying the Beehive Placement Analyzer application on a server using Docker and Docker Compose.
 
 ## Prerequisites
 
-- A VPS with a public IP address (e.g., `54.37.17.30`).
-- SSH access to the VPS.
+- A server with a public IP address (e.g., `54.37.17.30`).
+- SSH access to the server.
 - A user with `sudo` privileges.
+- Docker and Docker Compose installed. If you need to install them, see the "Installing Docker and Docker Compose" section at the end of this guide.
 
-## Step 1: Install Docker and Docker Compose
+## Deployment
 
-First, you need to install Docker and Docker Compose on your VPS. Connect to your server via SSH and run the following commands:
-
-### Install Docker
-```bash
-# Update the package list
-sudo apt-get update
-
-# Install prerequisites
-sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
-
-# Add Docker's official GPG key
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-
-# Add the Docker repository
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-# Install Docker Engine
-sudo apt-get update
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io
-```
-
-### Install Docker Compose
-```bash
-# Download the latest version of Docker Compose
-sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-
-# Apply executable permissions to the binary
-sudo chmod +x /usr/local/bin/docker-compose
-```
-
-### Add your user to the `docker` group (optional)
-To run `docker` commands without `sudo`, add your user to the `docker` group:
-```bash
-sudo usermod -aG docker ${USER}
-```
-You will need to log out and log back in for this change to take effect.
-
-## Step 2: Clone the Repository
-
-Next, clone the application's repository to your VPS:
+### Step 1: Clone the Repository
+Clone the application's repository to your server:
 ```bash
 git clone <repository_url>
 cd <repository_directory>
 ```
-Replace `<repository_url>` with the actual URL of your Git repository and `<repository_directory>` with the name of the directory created by the clone command.
+*Replace `<repository_url>` and `<repository_directory>` with your actual repository details.*
 
-## Step 3: Configure the Firewall
-
-Ensure that your VPS firewall allows traffic on port 80 (HTTP). If you are using `ufw`, you can enable it with the following command:
-```bash
-sudo ufw allow 80/tcp
-```
-
-## Step 4: Build and Run the Application
-
-Now you are ready to build and run the application using Docker Compose. From the root of the project directory, run the following command:
+### Step 2: Build and Run the Application
+From the root of the project directory, run the following command:
 ```bash
 docker-compose up --build -d
 ```
-- `--build`: This flag tells Docker Compose to build the images before starting the containers.
-- `-d`: This flag runs the containers in detached mode, so they will continue to run in the background.
+This command builds the Docker images and starts the application containers in the background. The application will be running on port `8080`.
 
-## Step 5: Access the Application
+### Step 3: Access the Application
+You can now access the application directly by navigating to your server's IP address and port `8080` in your web browser:
+**http://54.37.17.30:8080**
 
-Once the containers are running, you can access the application by navigating to your VPS's IP address in your web browser:
-[http://54.37.17.30](http://54.37.17.30)
+## Integrating with Your Existing Nginx (for n8n)
 
-## Managing the Application
+You mentioned you are running `n8n` on the same server, which uses a global Nginx server. To make the Beekeeper app accessible on the standard port 80 (e.g., at a path like `http://54.37.17.30/beekeeper`), you can configure your **global Nginx** to act as a reverse proxy.
 
-- **To stop the application:**
-  ```bash
-  docker-compose down
-  ```
-- **To view the logs:**
-  ```bash
-  docker-compose logs -f
-  ```
-- **To restart the application:**
-  ```bash
-  docker-compose restart
-  ```
+**1. Create a new Nginx configuration file:**
+```bash
+sudo nano /etc/nginx/sites-available/beekeeper
+```
 
-That's it! Your Beehive Placement Analyzer application is now deployed and accessible.
+**2. Add the following content to the file:**
+This configuration tells Nginx that any traffic coming to the `/beekeeper/` path should be forwarded to our application running on port `8080`.
+```nginx
+location /beekeeper/ {
+    proxy_pass http://localhost:8080/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+}
+```
+*Save and close the file (`Ctrl+X`, `Y`, `Enter`).*
+
+**3. Enable the new configuration:**
+```bash
+sudo ln -s /etc/nginx/sites-available/beekeeper /etc/nginx/sites-enabled/
+```
+
+**4. Test and restart your global Nginx:**
+```bash
+sudo nginx -t
+sudo systemctl restart nginx
+```
+
+After this, you should be able to access the Beekeeper application at **http://54.37.17.30/beekeeper/**.
 
 ---
 
-## Local Development
+## Managing the Application
 
-To run the application on your local machine for development, you will also use Docker. The process is very similar to the production deployment.
+- **To stop the application:** `docker-compose down`
+- **To view logs:** `docker-compose logs -f`
+- **To restart:** `docker-compose restart`
 
-### Prerequisites
+---
 
-- Docker and Docker Compose installed on your local machine.
+## Appendix: Installing Docker and Docker Compose
 
-### Steps
+If you don't have Docker and Docker Compose installed, follow these steps.
 
-1.  **Clone the Repository:**
-    If you haven't already, clone the repository to your local machine.
-    ```bash
-    git clone <repository_url>
-    cd <repository_directory>
-    ```
+**Install Docker:**
+```bash
+sudo apt-get update
+sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+```
 
-2.  **Build and Run with Docker Compose:**
-    From the root of the project directory, run the following command:
-    ```bash
-    docker-compose up --build
-    ```
-    This will build the Docker images and start the containers. Unlike the production command, we omit the `-d` flag so you can see the logs from both the frontend and backend services directly in your terminal. To stop the services, press `Ctrl+C`.
+**Install Docker Compose:**
+```bash
+sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+```
 
-3.  **Access the Application:**
-    Once the containers are running, you can access the application in your web browser at:
-    [http://localhost](http://localhost)
+**Add user to Docker group (optional, avoids using `sudo` for Docker commands):**
+```bash
+sudo usermod -aG docker ${USER}
+```
+*(You will need to log out and back in for this to take effect.)*
